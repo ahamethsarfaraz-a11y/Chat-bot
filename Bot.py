@@ -19,7 +19,7 @@ import aiohttp
 load_dotenv()
 
 # ============ CONFIGURATION ============
-TELEGRAM_TOKEN = os.getenv("8991408656:AAHf80AxAzlj2n1V-SZpp3USWBuPTLNtjQ4")
+TELEGRAM_TOKEN = os.getenv("8576783728:AAHsOMRJ96FfJRYCQh4zSDen7BKM14uDQco")
 OPENROUTER_API_KEY = os.getenv("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")
 
 # Nezuko Personality Configuration
