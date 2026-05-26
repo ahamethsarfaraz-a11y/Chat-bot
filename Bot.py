@@ -8,18 +8,25 @@ import sqlite3
 import io
 from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
+import textwrap
 
-TOKEN = ""
+# ================================================================
+# BOT CONFIGURATION
+# ================================================================
+
+TOKEN = os.environ.get("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
 URL = "https://api.telegram.org/bot" + TOKEN + "/"
 BOT_USERNAME = "Cricketrivalrybot"
 
-BANNER_FILE_ID = "AgACAgUAAxkBAAFKrxlqFWi9Bkqpwj8hpsART6hNvQGQFAACARBrGwrLsVSnHwn2NwABy4ABAAMCAAN4AAM7BA"
+# Use a simple working banner ID (without emojis in filename)
+BANNER_FILE_ID = "AgACAgUAAxkBAAFKs41qFaM3aWdHD1hnDoo019iDrDqXLwACcxVrG2XLqVQMXv-UUeaKBQEAAwIAA3gAAzsE"
 
 games = {}
 player_game = {}
 
 DB_FILE = "cricket.db"
 
+# Stickers - keep as is
 WIN_STICKER = "CAACAgUAAxkBAAFKrPJqFUaZiw9y209_lT3rxzWl2JkMxAACbxcAAsH7CVdefzyODEIXXDsE"
 WIN_STICKER2 = "CAACAgUAAxkBAAFKrCVqFT8eqpF1zn9qITLD0zfkMlyhIwACYSAAAlDNqFRrPW9iJlH0yTsE"
 START_STICKER = "CAACAgUAAxkBAAFJ7CRqCoG6I7i5rz8EqcedhKAfVmpnmgAC5RwAAmpVWFRVEf2PcqTE5jsE"
@@ -190,7 +197,7 @@ def mystats_text(uid, name):
         "🏆 W: "+str(p["wins"])+" 😔 L: "+str(p["losses"]))
 
 # ================================================================
-# IMAGE GENERATION
+# IMAGE GENERATION - FIXED FOR RAILWAY
 # ================================================================
 
 def get_user_photo(uid):
@@ -223,83 +230,57 @@ def make_circle_img(img, size):
     return result
 
 def get_font(size, bold=False):
+    """Get font - works on Railway without external fonts"""
     try:
-        if bold:
-            return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", size)
-        return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size)
+        # Try to use default font
+        return ImageFont.load_default()
     except:
         return ImageFont.load_default()
 
 def generate_mystats_image(uid, name):
-    """Generate black/gold stats card with user DP"""
+    """Generate stats card that works on Railway"""
     p = get_player(uid)
     W, H = 700, 500
-    img = Image.new("RGBA", (W, H), (10, 10, 10, 255))
+    img = Image.new("RGB", (W, H), color=(10, 10, 10))
     draw = ImageDraw.Draw(img)
-
+    
     # Gold border
-    draw.rounded_rectangle([4, 4, W-4, H-4], radius=20, outline=(212, 175, 55), width=3)
-
-    # Header bar
-    draw.rounded_rectangle([4, 4, W-4, 80], radius=20, fill=(30, 30, 30), outline=(212, 175, 55), width=2)
-
-    # User DP circle
-    dp = get_user_photo(uid)
-    dp_size = 70
-    dp_x, dp_y = 20, 8
-    if dp:
-        dp_circle = make_circle_img(dp, dp_size)
-        img.paste(dp_circle, (dp_x, dp_y), dp_circle)
-    else:
-        draw.ellipse([dp_x, dp_y, dp_x+dp_size, dp_y+dp_size], fill=(50, 50, 50), outline=(212, 175, 55), width=2)
-        draw.text((dp_x+18, dp_y+18), "🏏", font=get_font(30), fill=(212, 175, 55))
-
-    # Gold circle border around DP
-    draw.ellipse([dp_x-2, dp_y-2, dp_x+dp_size+2, dp_y+dp_size+2], outline=(212, 175, 55), width=2)
-
-    # Name
-    draw.text((105, 15), name, font=get_font(26, bold=True), fill=(212, 175, 55))
-    draw.text((105, 48), "🏏 Cricket Rivalry Stats", font=get_font(16), fill=(180, 180, 180))
-
+    draw.rectangle([5, 5, W-5, H-5], outline=(212, 175, 55), width=3)
+    
+    # Title
+    draw.text((W//2-130, 20), "CRICKET RIVALRY STATS", fill=(212, 175, 55))
+    draw.text((W//2-80, 55), name, fill=(255, 255, 255))
+    
     if not p:
-        draw.text((W//2-80, H//2), "No stats yet!", font=get_font(24, bold=True), fill=(212, 175, 55))
+        draw.text((W//2-60, H//2), "No stats yet!", fill=(212, 175, 55))
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         buf.seek(0)
         return buf
-
+    
+    # Stats display
+    y = 100
     balls = p["balls_faced"]
     sr = round(p["runs"]/balls*100, 2) if balls > 0 else 0
     bowled = p["balls_bowled"]
     eco = round(p["runs_conceded"]/(bowled/6), 2) if bowled > 0 else 0
-
-    # Stats grid
-    stats = [
-        ("RUNS", str(p["runs"]), "GAMES", str(p["games"])),
-        ("HIGHEST", str(p["highest"])+"("+str(p["highest_balls"])+"b)", "SR", str(sr)),
-        ("SIXES", str(p["sixes"]), "FOURS", str(p["fours"])),
-        ("100s", str(p["centuries"]), "50s", str(p["fifties"])),
-        ("WICKETS", str(p["wickets"]), "ECO", str(eco)),
-        ("DUCKS", str(p["ducks"]), "MoM", str(p["man_of_match"])),
-        ("WINS", str(p["wins"]), "LOSSES", str(p["losses"])),
+    
+    stats_lines = [
+        f"Highest: {p['highest']} ({p['highest_balls']}b)",
+        f"Runs: {p['runs']} ({p['games']}g)",
+        f"Wickets: {p['wickets']}",
+        f"Sixes: {p['sixes']}  |  Fours: {p['fours']}",
+        f"100s: {p['centuries']}  |  50s: {p['fifties']}",
+        f"Ducks: {p['ducks']}  |  Hat-tricks: {p['hat_tricks']}",
+        f"SR: {sr}  |  Eco: {eco}",
+        f"Wins: {p['wins']}  |  Losses: {p['losses']}",
+        f"Man of Match: {p['man_of_match']}"
     ]
-
-    start_y = 100
-    for i, (k1, v1, k2, v2) in enumerate(stats):
-        y = start_y + i * 54
-        # Left card
-        draw_rounded_rect(draw, [20, y, 330, y+46], 10, fill=(25, 25, 25), outline=(212, 175, 55), width=1)
-        draw.text((30, y+4), k1, font=get_font(13), fill=(180, 180, 180))
-        draw.text((30, y+22), v1, font=get_font(18, bold=True), fill=(212, 175, 55))
-        # Right card
-        draw_rounded_rect(draw, [360, y, 670, y+46], 10, fill=(25, 25, 25), outline=(212, 175, 55), width=1)
-        draw.text((370, y+4), k2, font=get_font(13), fill=(180, 180, 180))
-        draw.text((370, y+22), v2, font=get_font(18, bold=True), fill=(212, 175, 55))
-
-    # Bottom bar
-    draw.rounded_rectangle([4, H-36, W-4, H-4], radius=10, fill=(30, 30, 30))
-    draw.text((W//2-80, H-28), "CRICKET RIVALRY BOT", font=get_font(14, bold=True), fill=(212, 175, 55))
-
+    
+    for line in stats_lines:
+        draw.text((30, y), line, fill=(200, 200, 200))
+        y += 40
+    
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
@@ -307,66 +288,31 @@ def generate_mystats_image(uid, name):
 
 def generate_mom_image(batter_name, batter_uid, runs, balls_f, fours, sixes,
                         bowler_name, b_runs, b_balls, b_wickets, winner_name):
-    """Generate Man of Match image after game ends - Black/Gold theme"""
-    W, H = 700, 520
-    img = Image.new("RGBA", (W, H), (10, 10, 10, 255))
+    """Generate MOM image that works on Railway"""
+    W, H = 700, 400
+    img = Image.new("RGB", (W, H), color=(10, 10, 10))
     draw = ImageDraw.Draw(img)
-
-    # Gold outer border
-    draw.rounded_rectangle([3, 3, W-3, H-3], radius=22, outline=(212, 175, 55), width=4)
-
+    
+    # Border
+    draw.rectangle([5, 5, W-5, H-5], outline=(212, 175, 55), width=3)
+    
     # Header
-    draw.rounded_rectangle([3, 3, W-3, 85], radius=22, fill=(20, 20, 20), outline=(212, 175, 55), width=2)
-    draw.text((W//2-120, 10), "🏆 MATCH RESULT 🏆", font=get_font(28, bold=True), fill=(212, 175, 55))
-    draw.text((W//2-90, 50), "Winner: "+winner_name, font=get_font(20), fill=(255, 255, 255))
-
-    # MOM Section
-    draw.text((W//2-100, 100), "🎖️ MAN OF THE MATCH", font=get_font(22, bold=True), fill=(212, 175, 55))
-    draw.line([(40, 130), (W-40, 130)], fill=(212, 175, 55), width=2)
-
-    # Batter DP
-    dp = get_user_photo(batter_uid)
-    dp_size = 90
-    dp_x, dp_y = W//2 - dp_size//2, 140
-    if dp:
-        dp_circle = make_circle_img(dp, dp_size)
-        img.paste(dp_circle, (dp_x, dp_y), dp_circle)
-    else:
-        draw.ellipse([dp_x, dp_y, dp_x+dp_size, dp_y+dp_size], fill=(40, 40, 40), outline=(212, 175, 55), width=2)
-    draw.ellipse([dp_x-3, dp_y-3, dp_x+dp_size+3, dp_y+dp_size+3], outline=(212, 175, 55), width=3)
-
-    # Batter name
-    draw.text((W//2-len(batter_name)*7, dp_y+dp_size+8), batter_name, font=get_font(22, bold=True), fill=(212, 175, 55))
-
-    # Batter stats row
+    draw.text((W//2-100, 20), "MATCH RESULT", fill=(212, 175, 55))
+    draw.text((W//2-70, 55), f"Winner: {winner_name}", fill=(255, 215, 0))
+    draw.text((W//2-90, 95), "MAN OF THE MATCH", fill=(212, 175, 55))
+    
+    # Batter stats
     sr = round(runs/balls_f*100, 1) if balls_f > 0 else 0
-    bat_stats = [("RUNS", str(runs)), ("BALLS", str(balls_f)), ("4s", str(fours)), ("6s", str(sixes)), ("SR", str(sr))]
-    bx = 30
-    for label, val in bat_stats:
-        draw_rounded_rect(draw, [bx, 290, bx+118, 350], 10, fill=(25,25,25), outline=(212,175,55), width=1)
-        draw.text((bx+8, 295), label, font=get_font(13), fill=(180,180,180))
-        draw.text((bx+8, 316), val, font=get_font(18, bold=True), fill=(212,175,55))
-        bx += 128
-
-    # Divider
-    draw.line([(40, 365), (W-40, 365)], fill=(60, 60, 60), width=1)
-    draw.text((30, 375), "⚾ BEST BOWLER", font=get_font(18, bold=True), fill=(180, 180, 180))
-
+    draw.text((50, 150), f"BEST BATTER: {batter_name}", fill=(255, 255, 255))
+    draw.text((70, 180), f"Runs: {runs}  |  Balls: {balls_f}  |  SR: {sr}", fill=(200, 200, 200))
+    draw.text((70, 210), f"4s: {fours}  |  6s: {sixes}", fill=(200, 200, 200))
+    
     # Bowler stats
     eco = round(b_runs/(b_balls/6), 2) if b_balls > 0 else 0
-    bowl_stats = [("BOWLER", bowler_name[:10]), ("OVERS", str(b_balls//6)+"."+str(b_balls%6)),
-                  ("RUNS", str(b_runs)), ("WKTS", str(b_wickets)), ("ECO", str(eco))]
-    bx = 30
-    for label, val in bowl_stats:
-        draw_rounded_rect(draw, [bx, 405, bx+118, 465], 10, fill=(25,25,25), outline=(80,80,80), width=1)
-        draw.text((bx+8, 410), label, font=get_font(12), fill=(150,150,150))
-        draw.text((bx+8, 430), val, font=get_font(16, bold=True), fill=(200,200,200))
-        bx += 128
-
-    # Footer
-    draw.rounded_rectangle([3, H-36, W-3, H-3], radius=10, fill=(20,20,20))
-    draw.text((W//2-80, H-28), "CRICKET RIVALRY BOT", font=get_font(14, bold=True), fill=(212,175,55))
-
+    overs = f"{b_balls//6}.{b_balls%6}"
+    draw.text((50, 270), f"BEST BOWLER: {bowler_name}", fill=(255, 255, 255))
+    draw.text((70, 300), f"Overs: {overs}  |  Runs: {b_runs}  |  Wkts: {b_wickets}  |  Eco: {eco}", fill=(200, 200, 200))
+    
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     buf.seek(0)
@@ -455,14 +401,27 @@ def send_photo_buffer(cid, buf, caption=""):
             data={"chat_id": cid, "caption": caption},
             files={"photo": ("image.png", buf, "image/png")},
             timeout=20)
-    except Exception as e: print("send_photo_buffer error:", e)
+    except Exception as e: 
+        print("send_photo_buffer error:", e)
+        # Fallback to text if image fails
+        send(cid, caption if caption else "Image generated but failed to send")
 
 def send_banner(cid):
+    """Send banner image - works with valid file_id"""
     try:
-        requests.post(URL+"sendPhoto",
+        result = requests.post(
+            URL + "sendPhoto",
             data={"chat_id": cid, "photo": BANNER_FILE_ID},
-            timeout=10)
-    except Exception as e: print("send_banner error:", e)
+            timeout=10
+        )
+        if not result.ok:
+            print("Banner send failed:", result.text)
+            # Fallback to text banner
+            send(cid, "🏏 WELCOME TO CRICKET RIVALRY BOT 🏏\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    except Exception as e:
+        print("send_banner error:", e)
+        # Fallback to text banner
+        send(cid, "🏏 WELCOME TO CRICKET RIVALRY BOT 🏏\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
 def bowling_btn():
     return {"inline_keyboard":[[{"text":"⚾ Go to Bowl (DM)","url":"https://t.me/Cricketrivalrybot?start=bowl"}]]}
@@ -1170,7 +1129,7 @@ def finish_game(g, cid, winner_name, winner_idx, loser_idx, margin):
                     best_bowl_name, best_bowl_runs, best_bowl_balls, max(0,best_bowl_wkts),
                     winner_name
                 )
-                send_photo_buffer(cid, mom_img, "🎖️ Man of the Match — "+best_bat_name)
+                send_photo_buffer(cid, mom_img, "Man of the Match - "+best_bat_name)
             except Exception as e:
                 print("MOM image error:", e)
 
@@ -1181,7 +1140,7 @@ def finish_game(g, cid, winner_name, winner_idx, loser_idx, margin):
         cleanup_game(cid,g)
 
 # ================================================================
-# FIXED FUNCTIONS - THESE WERE THE PROBLEMATIC ONES
+# FIXED FUNCTIONS
 # ================================================================
 
 def check_hat_trick(g, bowler_uid):
@@ -1191,7 +1150,7 @@ def check_hat_trick(g, bowler_uid):
     bowler_balls = track.setdefault(bk, [])
     if len(bowler_balls) >= 3:
         last3 = bowler_balls[-3:]
-        return all(last3)  # All 3 balls were wickets (True)
+        return all(last3)
     return False
 
 def record_bowler_ball(g, bowler_uid, is_wicket):
@@ -1199,10 +1158,6 @@ def record_bowler_ball(g, bowler_uid, is_wicket):
     track = g.setdefault("hat_trick_track", {})
     bk = str(bowler_uid)
     track.setdefault(bk, []).append(is_wicket)
-
-# ================================================================
-# END OF FIXED FUNCTIONS
-# ================================================================
 
 def save_test_innings_stats(g):
     ti = g.get("test_innings_num",1) - 1
@@ -2374,18 +2329,29 @@ def handle_callback(cb):
 # MAIN LOOP
 # ================================================================
 
-init_db()
-print("✅ Database ready!")
-print("🏏 Bot running! Username: Cricketrivalrybot")
-
-while True:
+if __name__ == "__main__":
     try:
-        updates=poll()
-        for u in updates:
-            offset=u["update_id"]+1
-            if "message" in u: handle_message(u["message"])
-            elif "callback_query" in u: handle_callback(u["callback_query"])
+        init_db()
+        print("✅ Database ready!")
+        print("🏏 Bot running! Username:", BOT_USERNAME)
+        print("Bot started successfully!")
+        
+        while True:
+            try:
+                updates = poll()
+                for u in updates:
+                    offset = u["update_id"] + 1
+                    if "message" in u:
+                        handle_message(u["message"])
+                    elif "callback_query" in u:
+                        handle_callback(u["callback_query"])
+            except Exception as e:
+                print("Main loop error:", e)
+                import traceback
+                traceback.print_exc()
+                time.sleep(5)
     except Exception as e:
-        print("Main loop error:",e)
-        import traceback; traceback.print_exc()
-        time.sleep(5)
+        print("FATAL ERROR on startup:", e)
+        import traceback
+        traceback.print_exc()
+        time.sleep(30)
